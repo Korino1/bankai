@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+title: "Bankai: Ultra-Sparse Adaptation of 1-Bit LLMs via XOR Patches"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Saravanan
+    given-names: Nikshep
+    alias: nikshepsvn
+date-released: "2026-04-02"
+url: "https://github.com/nikshepsvn/bankai"
+license: Apache-2.0
+keywords:
+  - 1-bit language models
+  - XOR patches
+  - binary neural networks
+  - model adaptation
+  - bit-flip
+  - compact fine-tuning

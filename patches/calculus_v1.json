@@ -1,0 +1,393 @@
+{
+  "version": 1,
+  "format": "bankai_row_xor_v1",
+  "name": "calculus_v1",
+  "description": "Improves calculus and advanced math reasoning",
+  "base_model": "prism-ml/Bonsai-8B-mlx-1bit",
+  "flips": [
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 1601
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 9853
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 4296
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 4525
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 10200
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 1699
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 8255
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 9875
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 6360
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 5735
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 932
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 6050
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 5580
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 7993
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 10432
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 9221
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 6942
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 4724
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 8881
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 3696
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 7129
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 4765
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 2291
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 8766
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 5509
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 2510
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 689
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 4936
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 9771
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 3647
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 859
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 6959
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 6012
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 2382
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 9480
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 8815
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 8236
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 621
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 733
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 1841
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 8508
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 6346
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 8704
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 1605
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 619
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 11687
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 11165
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 653
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 6562
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 12208
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 997
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 4390
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 5339
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 2213
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 10508
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 6022
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 1418
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 8744
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 8504
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 5522
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 5835
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 3536
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 10492
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 9949
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 4007
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 11512
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 8799
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 1582
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 10054
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 7340
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 11496
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 178
+    }
+  ],
+  "stats": {
+    "n_flips": 72,
+    "bits_flipped": 294912,
+    "size_bytes": 864
+  },
+  "metadata": {
+    "search_algorithm": "greedy_hill_climbing_screened",
+    "search_layers": [
+      1,
+      2,
+      3,
+      4,
+      34
+    ],
+    "search_projs": [
+      "gate_proj",
+      "up_proj"
+    ],
+    "max_iters": 300,
+    "control_penalty": 2.0,
+    "final_fitness": 0.8098958333333334,
+    "search_time_seconds": 1894.9262709617615,
+    "screened_out": 31
+  }
+}

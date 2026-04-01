@@ -1,0 +1,634 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Bankai" width="700">
+</p>
+
+# Bankai: Ultra-Sparse Adaptation of 1-Bit LLMs via XOR Patches
+
+<p align="center">
+  <b>Nikshep Saravanan</b>
+  <br>
+  April 2, 2026
+  <br><br>
+  <a href="paper/bankai.pdf">Paper</a> &bull;
+  <a href="https://github.com/nikshepsvn/bankai">GitHub</a> &bull;
+  <a href="#quick-demo">Demo</a> &bull;
+  <a href="#reproducing">Reproduce</a> &bull;
+  <a href="#citation">Cite</a>
+  <br>
+  <sub>Experiments reproducible on Apple Silicon &bull; Apache 2.0 &bull; Early-stage research</sub>
+</p>
+
+---
+
+## Quick Demo
+
+These prompts were **never seen during patch search** — they are held-out validation examples:
+
+```
+Without patch:   d/dx [x^7 + x] = 0                          ✗
+With patch:      d/dx [x^7 + x] = 7x^6 + 1                   ✓
+
+Without patch:   Is 113 prime?  No, 113 is not prime           ✗
+With patch:      Is 113 prime?  Yes, 113 is a prime number     ✓
+```
+
+The patch was trained on other polynomials and other primes — but never saw `x^7 + x` or `113`. A 1.1 KB patch — 93 row flips, 0.007% of model weights — generalizes to unseen problems across categories. Applied in microseconds. Removed with the same XOR operation. (Note: the `x^7 + x` base model had a positive logit gap but still generated `0`; the patch strengthened the gap enough to fix free generation.) From [Experiment 6](#experiment-6-generalization-optimized-search).
+
+---
+
+## Abstract
+
+True 1-bit LLMs have no post-training adaptation method — LoRA, fine-tuning, and QAT all require continuous weights or gradients that binary models lack. We introduce **Bankai**, the first post-training adaptation method for true 1-bit LLMs, using bitwise XOR operations on binary weights. Bankai patches are sparse XOR bitmasks that modify model weights in-place with a single bitwise operation, incur zero inference overhead, and compress to around one kilobyte.\*
+
+We validate on [Bonsai 8B](https://huggingface.co/prism-ml/Bonsai-8B-mlx-1bit) (PrismML, 2026), a true 1-bit, 8.2 billion parameter language model. Through eight experiments: (1) binary MLP weights exhibit massive redundancy; (2) scale-guided bit flips produce **3.88x** more behavioral impact than random flips; (3–4) greedy search yields patches that correct specific calculus failures in free generation; (5) patches trained on few probes memorize rather than generalize; (6) training on diverse probe variations produces patches that **generalize to held-out prompts** — fixing 4 of 17 problems the base model gets wrong (23.5%) with zero breakage on the 13 it already solves; (7) stacking two patches via XOR is mechanically sound but behaviorally lossy; and (8) a GSM8K safety check on 50 word problems shows no degradation to general math reasoning.
+
+\* *Experiments 3–4 produce sub-kilobyte patches (840–864 bytes). The generalization-optimized patch (Experiment 6) is 1.1 KB.*
+
+## How It Works
+
+```
+ Original Weights          XOR Patch (sparse)         Patched Weights
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ 1 0 1 1 0 0 1 0 │    │ 0 0 0 0 0 0 0 0 │    │ 1 0 1 1 0 0 1 0 │  (unchanged)
+│ 0 1 0 1 1 0 1 1 │ ⊕  │ 1 1 1 1 1 1 1 1 │ =  │ 1 0 1 0 0 1 0 0 │  ← row flipped
+│ 1 1 0 0 1 1 0 1 │    │ 0 0 0 0 0 0 0 0 │    │ 1 1 0 0 1 1 0 1 │  (unchanged)
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+
+ To revert: Patched Weights ⊕ same XOR Patch = Original Weights
+ To combine: Patch_A ⊕ Patch_B = Combined Patch (not yet empirically validated)
+```
+
+Each weight in a true 1-bit model is a single bit: `0` → `−scale`, `1` → `+scale`. In the current implementation, each "flip" targets an entire row (one neuron = 4,096 bits), not individual bits — hence the all-ones mask row in the diagram. This row-level granularity is a design tradeoff discussed in [Limitations](#limitations).
+
+### Patch Format
+
+A Bankai patch is a JSON file listing which rows to flip:
+
+```json
+{
+  "version": 1,
+  "format": "bankai_row_xor_v1",
+  "name": "math_patch",
+  "base_model": "prism-ml/Bonsai-8B-mlx-1bit",
+  "flips": [
+    {"layer": 2, "proj": "gate_proj", "row": 5414},
+    {"layer": 4, "proj": "gate_proj", "row": 2786},
+    {"layer": 1, "proj": "gate_proj", "row": 5301}
+  ]
+}
+```
+
+Each flip is 12 bytes (3 integers). You never store the full bitmask — the flip locations fully determine it. Included patches: `patch_math_v1.json` (72 flips, 864 bytes), `calculus_v1.json` (70 flips, 840 bytes), and `calculus_generalized_v1.json` (93 flips, 1,116 bytes — the generalization-optimized patch from Experiment 6).
+
+## Contributions
+
+1. **The first post-training adaptation method for true 1-bit LLMs.** For nearby behavioral variants, the diff between two model states is a sparse XOR bitmask, enabling patches orders of magnitude smaller than LoRA adapters (840–1,116 bytes vs. ~100 MB) with zero inference overhead. Existing adaptation methods (LoRA, fine-tuning, QAT) require continuous weights or gradients and are not applicable to binary architectures.
+
+2. **Scale-guided targeting.** Per-group FP16 scale factors predict which weight regions are most behaviorally sensitive, enabling 3.88x more efficient search than uniform random sampling.
+
+3. **Layer-level functional specialization in 1-bit architectures.** Early layers (1–4) and the penultimate layer (34) are load-bearing, while middle layers (17–21) contribute minimally — validated for the first time in a binary-weight architecture.
+
+4. **A toolkit and patch format** for reproducible XOR patch creation, application, and evaluation.
+
+## Background and Motivation
+
+### The Adaptation Gap
+
+Every existing method for adapting LLM behavior after training requires continuous-valued operations. LoRA adds low-rank weight deltas in float space. Fine-tuning backpropagates continuous gradients. Quantization-aware training adjusts weights during pre-training, not after deployment. None of these work on a model whose weights are single bits.
+
+True 1-bit models like Bonsai 8B store every weight as a single bit (`0` → `−scale`, `1` → `+scale`), packed into `uint32` arrays with per-group FP16 scale factors. Once deployed, they are frozen — there is no mechanism to adjust their behavior for a new domain, fix a known failure, or specialize for a use case. Bankai fills this gap.
+
+Because weights are bits, the "diff" between two model states is a bitwise XOR, which can be sparse and compressible when behavioral variants are close in Hamming space. This approach does not extend to ternary (1.58-bit) models like BitNet b1.58, where weights take values `{-1, 0, +1}` and require 2 bits of storage. XOR on 2-bit ternary encodings produces invalid states (`XOR(01, 10) = 11` has no valid mapping), making the mechanism specific to true binary architectures. As of April 2, 2026, Bonsai 8B is the only production-quality true 1-bit LLM.
+
+### Why This Matters at Deployment Scale
+
+The properties of XOR patches — kilobyte-scale size, microsecond application, zero inference overhead, instant reversibility — enable a deployment model that is impossible with existing adaptation methods:
+
+A library of domain patches (math, code, medical, legal), each ~1 KB, stored alongside a 1.15 GB base model. Hot-swappable at inference time with no latency cost — switch from a code specialist to a medical specialist between requests, or even between tokens. A thousand patches adds 1 MB of storage. On a phone.
+
+LoRA cannot do this even on continuous models: adapters are too large to store many (~100 MB each), too slow to swap live (reload weights), and add compute on every forward pass. XOR patches are the model-behavior equivalent of feature flags in software — or binary patches in software distribution.
+
+### Comparison to Existing Adaptation Methods
+
+| Property | LoRA | Bankai (XOR Patch) |
+|---|---|---|
+| **Works on 1-bit models** | **No** (requires continuous weights) | **Yes** |
+| Typical patch size | ~50–200 MB | **~1 KB** (0.8–1.1 KB) |
+| Inference overhead | Extra matmul per layer per token | **None** (applied once) |
+| Apply/remove latency | Load adapter weights | **Microseconds** (single XOR) |
+| Reversibility | Requires storing original weights | **Exact** (XOR is self-inverse) |
+| Composability | Requires careful merging | Algebraically composable (untested behaviorally) |
+
+LoRA and Bankai are not alternatives — LoRA is inapplicable to true 1-bit architectures. This table illustrates the paradigm difference between continuous-weight adaptation and binary-weight patching.
+
+Note on composability: XOR is algebraically composable — `Patch_A ⊕ Patch_B ⊕ Patch_C` is valid regardless of order. However, behavioral composability (stacking a math patch and a code patch and getting both improvements) is an empirical question we have not yet validated. Patches with high Hamming overlap may interfere destructively.
+
+### Related Work
+
+**Low-rank adaptation.** LoRA (Hu et al., 2021) and its variants (QLoRA, Dettmers et al., 2023; DoRA, Liu et al., 2024) reduce fine-tuning cost via low-rank weight deltas. These require continuous weights and are not applicable to true 1-bit architectures — there is no meaningful "low-rank update" to a binary matrix. Bankai operates in binary space with zero runtime cost.
+
+**Compact adaptation.** RECAST (Xu et al., 2024) reduces task-specific parameters to fewer than 50 via weight reconstruction, achieving extreme parameter efficiency on continuous-weight models. Bankai achieves comparable parameter efficiency but in binary space, where the modification is a bitwise operation rather than a learned decomposition.
+
+**Binary neural networks.** XOR-Net (Bulat & Tzimiropoulos, 2020) uses XOR for efficient BNN computation. XNOR-Net (Rastegari et al., 2016) approximates convolutions with binary operations. These focus on efficient forward passes, not post-training behavioral modification.
+
+**1-bit and sub-1-bit LLMs.** BitNet (Wang et al., 2023) introduced 1.58-bit LLM training with ternary weights `{-1, 0, +1}`. BitNet b1.58 2B4T (Ma et al., 2025) demonstrated competitive performance at scale. Despite the "1-bit" branding, these are ternary models — XOR on their packed representations produces invalid states. Bonsai 8B (PrismML, 2026) is a true 1-bit model where each weight is a single bit, making bitwise XOR semantically valid. STBLLM (Dong et al., 2024; ICLR 2025) pushed compression below 1-bit using structured binarization, and notably observed that **some weights in binarized LLMs can be randomly flipped without significant performance degradation** — a finding our Experiment 1 independently confirms and extends. None of these works explore post-training behavioral modification via bitwise operations.
+
+**Bit-flip attacks.** Rakin et al. (2019) introduced the Bit-Flip Attack (BFA), showing that ~20 targeted bit flips can catastrophically degrade a quantized DNN. Subsequent work (T-BFA, Bai et al., 2021; Versatile Weight Attack, 2022) refined targeted attacks. This literature establishes that small numbers of bit flips produce outsized behavioral effects — but focuses exclusively on adversarial degradation. **Bankai inverts this mechanism**: constructive bit flips for targeted capability improvement.
+
+**Model editing.** ROME (Meng et al., 2022) and MEMIT (Meng et al., 2023) perform targeted factual edits on continuous-weight models. Bankai shares the goal of minimal, targeted intervention but operates on binary weights for behavioral (not factual) modification.
+
+## Methodology
+
+All experiments use Bonsai 8B (`prism-ml/Bonsai-8B-mlx-1bit`), a true 1-bit, 8.2B parameter model based on the Qwen3 architecture (36 layers, 4096 hidden dim, GQA with 32/8 heads). Weights are packed as `uint32` arrays with 1-bit group quantization (`group_size=128`), where each group of 128 binary weights shares one FP16 scale factor and bias.
+
+Experiments were run on Apple M3 (24 GB, peak ~3 GB for model + ~2 GB for search state) using PrismML's MLX fork with 1-bit kernel support.
+
+### Evaluation: Logit Gap Probes
+
+We measure behavioral change via **logit gap probes**: pairs of `(correct_token, wrong_token)` following a deterministic prompt. The logit gap `G = logit(correct) − logit(wrong)` is a single-forward-pass measurement: positive means the model prefers the correct answer, negative means it prefers the wrong one.
+
+**Target probes (math — optimized for):**
+
+| Name | Prompt | Correct | Wrong |
+|---|---|---|---|
+| math_1 | `1 + 1 =` | ` 2` | ` 3` |
+| math_2 | `2 + 2 =` | ` 4` | ` 5` |
+| math_3 | `7 * 8 =` | ` 56` | ` 54` |
+| math_4 | `The square root of 144 is` | ` 12` | ` 14` |
+| math_5 | `If x = 3, then x^2 =` | ` 9` | ` 8` |
+| math_6 | `100 / 4 =` | ` 25` | ` 20` |
+
+**Control probes (knowledge — preserved, not optimized for):**
+
+| Name | Prompt | Correct | Wrong |
+|---|---|---|---|
+| geo_1 | `The capital of France is` | ` Paris` | ` London` |
+| geo_2 | `The capital of Japan is` | ` Tokyo` | ` Beijing` |
+| knowledge_1 | `The color of the sky is` | ` blue` | ` red` |
+| knowledge_2 | `Einstein is famous for the theory of` | ` relativity` | ` evolution` |
+| water_formula | `The chemical formula for water is H` | `2` | `3` |
+
+Experiments 3 and 4 use the first 4 control probes; Experiment 4 additionally includes `water_formula`. The CLI also accepts custom probe files as JSON (see [Reproducing](#define-custom-probes)).
+
+### Experiment 1: Robustness to Random Bit Flips
+
+**Question:** How sensitive are binary LLM weights to random perturbation?
+
+**Method:** Flip N random bits across all MLP weight tensors (5.4B bits total). Measure perplexity on a fixed eval set of 5 sentences spanning factual knowledge, code, science, instructions, and biology (see `experiments/01_random_flips.py` for exact texts). Repeat for N ∈ {100, 1K, 10K, 50K, 100K, 500K} under four strategies: random across all layers, random in layers 16–24, scale-guided medium (25th–75th percentile), scale-guided high (top 25%).
+
+### Experiment 2: Structured Flips and Layer Specialization
+
+**Question:** Do structured (row-level, layer-level) flips produce structured behavioral effects?
+
+**Method:** For each of the 36 layers, flip all bits in the entire MLP (gate_proj, up_proj, down_proj) and measure logit gaps on 8 probes: the 4 control probes above plus `arithmetic` (`2 + 2`), `code_completion` (`print("Hello`), `python_api` (`open a file`), and `chemistry` (`H2O`). Then test row-level flips at varying counts (1, 4, 16, 64, 256, 1024 rows) in the most impactful layer. Compare high-scale rows vs. random rows at 64 rows.
+
+### Experiment 3: Greedy Patch Search
+
+**Question:** Can we find a minimal set of bit flips that improves a targeted capability while preserving others?
+
+**Method:** Greedy hill climbing over row-level flips in layers [1, 2, 3, 4, 34] (selected as the most impactful from Experiment 2). Each iteration: sample a row (weighted by scale magnitude), flip all 4,096 bits in that row, measure fitness, keep if improved, revert if not. Run for 200 iterations.
+
+**Fitness function:**
+
+```
+fitness = mean(target_gap − target_baseline) − λ · mean(max(0, control_baseline − control_gap))
+```
+
+We use λ = 2.0 to penalize control degradation more heavily than target improvement. This value was chosen empirically; values in the range [1.5, 3.0] produced qualitatively similar results (patches that improve target without degrading control). Lower values (< 1.0) allowed control degradation; higher values (> 4.0) were overly conservative and accepted very few flips.
+
+### Experiment 4: Calculus Patch (with Screening)
+
+**Question:** Can XOR patches fix complex math failures — calculus, number theory — not just basic arithmetic?
+
+**Method:** Same greedy search as Experiment 3, targeting 6 calculus/advanced math probes where the base model fails deterministically (verified across 5 runs each). Adds a screening optimization that checks only the 2 worst probes before full evaluation, rejecting unpromising candidates early.
+
+**Target probes (calculus — all verified failures on Bonsai 8B):**
+
+| Name | Prompt | Correct | Wrong | Base model says |
+|---|---|---|---|---|
+| poly_deriv | `d/dx [x^4 + 3x^2] =` | ` 4` | ` 0` | `0` |
+| second_deriv | `The second derivative of x^4 is 12x^` | `2` | `3` | `12x^3` |
+| poly_integral | `The integral of x^2 dx = ` | ` 1` | ` 2` | `2/3 x^3` |
+| prime_97 | `Is 97 prime? Answer: ` | ` Yes` | ` No` | `No` |
+| sin_pi6 | `sin(pi/6) = ` | ` 1` | ` 0` | `0.523 radians` |
+| exp_deriv | `d/dx [e^(2x)] = ` | ` 2` | ` 6` | `6e^(2x)` |
+
+### Experiment 5: Variation Testing
+
+**Question:** Does the Experiment 4 patch generalize beyond its 6 training prompts, or did it memorize specific patterns?
+
+**Method:** Generate 15 novel variations per probe category (90 total) covering unseen polynomials, primes, trig values, and rephrasings. Apply the Experiment 4 patch and measure sign flips (wrong→right vs right→wrong) on these never-seen probes.
+
+### Experiment 6: Generalization-Optimized Search
+
+Motivated by Experiment 5's finding that 6-probe patches memorize, we tested whether more diverse training signal produces generalization.
+
+**Question:** Can 10x more training probes produce patches that generalize to held-out prompts?
+
+**Method:** Train on 60 probes (10 per category: varied polynomials, rephrasings, different numbers) with mean fitness. Hold out 30 probes (5 per category) for validation. Same greedy search, same layers, same everything else — only the training set size changed. Search time scales roughly linearly with probe count: 6 probes → 13 min, 60 probes → 67 min.
+
+### Experiment 7: Patch Stacking
+
+**Question:** Do patches compose behaviorally when stacked via XOR?
+
+**Method:** Apply the Experiment 3 math patch and Experiment 4 calculus patch simultaneously (sequential XOR application). Test both math and calculus probes plus knowledge controls. Verify order independence and reversibility.
+
+### Experiment 8: GSM8K Safety Check
+
+**Question:** Does the patch degrade general math reasoning?
+
+**Method:** Run 50 GSM8K word problems with full generation (400 tokens), extract answers via pattern matching ("The answer is [N]"), compare accuracy with and without the Experiment 6 generalized patch.
+
+## Results
+
+### Experiment 1: Random Flips Are Absorbed
+
+| Flips | % of MLP bits | Max Perplexity Δ |
+|---|---|---|
+| 100 | 0.000002% | < 0.01 |
+| 10,000 | 0.0002% | < 0.01 |
+| 100,000 | 0.002% | < 0.02 |
+| 500,000 | 0.009% | < 0.08 |
+
+**Finding:** The model is remarkably robust to random perturbation, consistent with STBLLM's observation that some binary weights can be flipped without degradation. Even 500K random bit flips produce < 1% perplexity change, implying massive redundancy in MLP binary weights. (Attention weights, embeddings, and the LM head were not tested.)
+
+### Experiment 2: Layer Impact and Scale-Guided Targeting
+
+**Layer-level MLP flips — average absolute Δgap across 8 probes:**
+
+| Layer range | Avg abs. Δgap | Interpretation |
+|---|---|---|
+| 0–4 (early) | 3.2–7.2 | High impact — embedding/syntax |
+| 5–16 (middle) | 0.7–3.0 | Moderate — decreasing impact |
+| 17–21 (deep middle) | 0.7–1.6 | **Lowest impact — most redundant** |
+| 22–33 (late) | 1.6–3.4 | Moderate — increasing toward output |
+| 34 (penultimate) | **9.0** | **Highest impact** |
+| 35 (final) | 3.2 | High but less than 34 |
+
+**Scale-guided vs. random targeting (64 rows, layer 34):**
+
+| Strategy | Avg abs. Δgap | Ratio |
+|---|---|---|
+| Random rows | 0.118 | 1.0x |
+| High-scale rows | **0.459** | **3.88x** |
+
+**Domain-specific layer effects (full MLP flip):**
+
+| Probe | Layer 34 Δgap | Layer 3 Δgap | Layer 1 Δgap |
+|---|---|---|---|
+| physics | +13.80 | +3.79 | +1.69 |
+| code_completion | −15.90 | −16.37 | −8.44 |
+| geography_france | −8.87 | −7.74 | −7.71 |
+| common_knowledge | +5.01 | −4.85 | −1.45 |
+
+**Finding:** Layer effects appear domain-specific across our probe set, and the scale factors are predictive of impact, enabling more efficient targeted search.
+
+### Experiment 3: Greedy Patch Search
+
+**Search:** 200 iterations, 72 accepted flips, 7.5 minutes on Apple M3.
+
+**Before/after generation (representative):**
+
+```
+Without patch:  2 + 2 = 5
+With patch:     2 + 2 = 4  ✓
+
+Without patch:  7 * 8 = 320
+With patch:     7 * 8 = 64  ✗ (different wrong answer)
+```
+
+The `2 + 2` case shows a clean fix in both the logit probe and free generation. The `7 * 8` case is more instructive: the logit probe improved (the model now prefers 56 over 54), but free generation produces 64 (= 8×8) — a *different* wrong answer. The patch shifted the probability distribution in the right direction on the probed pair, but the full vocabulary contains other high-probability wrong answers. This gap between logit-probe improvement and generation-level correctness is a fundamental limitation of probe-based optimization, and motivates the move to benchmark-based evaluation in future work.
+
+**Patch effect on target probes (math):**
+
+| Probe | Baseline gap | Patched gap | Δ |
+|---|---|---|---|
+| 1 + 1 = 2 vs 3 | +1.37 | +2.37 | **+1.00** |
+| 2 + 2 = 4 vs 5 | +0.07 | +1.58 | **+1.50** |
+| 7 × 8 = 56 vs 54 | **−0.31** (wrong) | **+1.35** (correct) | **+1.66** |
+| √144 = 12 vs 14 | +1.54 | +1.34 | −0.20 |
+| x²=9 when x=3 | +3.14 | +3.77 | **+0.64** |
+| 100/4 = 25 vs 20 | −0.14 | −0.39 | −0.25 |
+
+The 100/4 probe degrades slightly (−0.25). This is a math probe worsened by a math-targeted patch, illustrating that greedy row-level flips are blunt instruments — flipping an entire neuron improves some arithmetic sub-tasks while slightly hurting others. Finer-grained search (per-group or per-bit) would likely reduce this interference.
+
+**Effect on control probes (knowledge — not optimized for):**
+
+| Probe | Baseline gap | Patched gap | Δ |
+|---|---|---|---|
+| France → Paris vs London | +6.50 | +6.95 | +0.46 |
+| Japan → Tokyo vs Beijing | +8.02 | +8.78 | +0.75 |
+| Sky → blue vs red | +3.68 | +3.82 | +0.14 |
+| Einstein → relativity vs evolution | −4.26 | −3.91 | +0.35 |
+
+The Einstein probe has a negative baseline, meaning the base model already incorrectly prefers "evolution" over "relativity." The patch slightly reduces this error (+0.35) but does not correct it — it was not in the optimization target. This illustrates that control probes are preserved, not improved, by the search process.
+
+**Patch statistics:**
+
+| Metric | Value |
+|---|---|
+| Accepted flips | 72 rows |
+| Bits modified | 294,912 of 5,435,817,984 (**0.005%**) |
+| Patch size | **864 bytes** |
+| Control degradation | None on measured controls (4 probes) |
+| Reversibility | Exact (max drift after removal: 0.000000) |
+
+### Experiment 4: Calculus Patch
+
+**Search:** 300 iterations (with screening on the 2 worst probes; 31 early rejections), 70 accepted flips, ~13 minutes on Apple M3.
+
+**Before/after generation:**
+
+```
+Without patch:  d/dx [x^4 + 3x^2] = 0                          ✗
+With patch:     d/dx [x^4 + 3x^2] = 4x^3 + 6x                  ✓
+
+Without patch:  The second derivative of x^4 is 12x^3            ✗
+With patch:     The second derivative of x^4 is 12x^2            ✓
+```
+
+Both failures were verified as deterministic across 5 runs before patching.
+
+**Prompt sensitivity finding:** The primality probe (`Is 97 prime?`) revealed that a single trailing space changes the base model's answer from "No" to "Yes" without any patch. The logit gap (Yes vs No) remains negative in both cases because the model generates "97" as its first token, bypassing both probed tokens entirely. This illustrates two important points: (1) single-token logit probes are fragile for multi-token reasoning tasks, and (2) diverse prompt variations in the training set (as used in Experiment 6) are essential to avoid optimizing for formatting artifacts rather than genuine capability.
+
+**Patch effect on target probes (calculus):**
+
+| Probe | Baseline gap | Patched gap | Δ |
+|---|---|---|---|
+| poly_deriv (d/dx polynomial) | +0.29 | **+2.47** | **+2.18** |
+| second_deriv (12x^2 vs 12x^3) | −0.23 | **+0.80** | **+1.03** |
+| exp_deriv (chain rule) | +4.06 | +4.69 | +0.63 |
+| poly_integral (1/3 vs 2/3) | −1.68 | −1.18 | +0.50 |
+| prime_97 (Yes vs No) | −1.43 | −1.22 | +0.21 |
+| sin_pi6 (trig value) | −0.39 | −0.51 | −0.12 |
+
+The polynomial derivative and second derivative probes show the largest improvements and both produce correct free-generation output. The integral and primality probes improve at the logit level but not enough to flip the generated answer — these remain limitations. The sin(π/6) probe slightly degrades, similar to the 100/4 interference observed in Experiment 3.
+
+**Control probes (knowledge):**
+
+| Probe | Baseline gap | Patched gap | Δ |
+|---|---|---|---|
+| France → Paris | +6.50 | +7.07 | +0.57 |
+| Japan → Tokyo | +8.02 | +8.79 | +0.77 |
+| Sky → blue | +3.68 | +3.81 | +0.13 |
+| Einstein | −4.26 | −3.89 | +0.37 |
+| Water → H2 | +7.84 | +7.82 | −0.02 |
+
+No meaningful degradation on measured controls (5 probes).
+
+**Patch statistics:**
+
+| Metric | Value |
+|---|---|
+| Accepted flips | 70 rows |
+| Bits modified | 286,720 (**0.005%**) |
+| Patch size | **840 bytes** |
+| Search iterations | 300 (31 screened out early) |
+
+### Experiment 5: Variation Testing (Experiment 4 Patch)
+
+**Question:** Does the 6-probe calculus patch generalize?
+
+We tested 90 novel variations (15 per category) against the Experiment 4 patch. Sign-flip analysis (correct→wrong or wrong→correct, ignoring confidence changes):
+
+| Metric | Count |
+|---|---|
+| Fixed (wrong → right) | 2 |
+| Broke (right → wrong) | 5 |
+| Stayed right | 57 |
+| Stayed wrong | 26 |
+| **Net sign flips** | **−3** |
+| Base accuracy | 62/90 (68.9%) |
+| Patched accuracy | 59/90 (65.6%) |
+
+**Finding:** The 6-probe patch memorizes specific prompts rather than shifting capabilities. It fixes 2 novel probes but breaks 5 — all borderline cases with baseline gaps < 1.2. The patch is a precision tool for targeted correction, not a capability improver.
+
+### Experiment 6: Generalization-Optimized Search
+
+**Search:** 60 training probes (10 per category), mean fitness, 300 iterations, 93 accepted flips, ~67 minutes on Apple M3. Validated on 30 held-out probes never seen during search.
+
+**Training set (60 probes):**
+
+| Metric | Count |
+|---|---|
+| Fixed (wrong → right) | 4 |
+| Broke (right → wrong) | 0 |
+| Accuracy | 44/60 → **48/60** |
+
+**Validation set (30 held-out probes, never seen during search):**
+
+| Metric | Count |
+|---|---|
+| Fixed (wrong → right) | **4** |
+| Broke (right → wrong) | **0** |
+| Accuracy | 13/30 → **17/30** |
+
+| Category | Fixed | Broke | Stayed right | Stayed wrong |
+|---|---|---|---|---|
+| poly_deriv | 1 | 0 | 3 | 1 |
+| second_deriv | 1 | 0 | 1 | 3 |
+| integral | 1 | 0 | 3 | 1 |
+| prime | 1 | 0 | 2 | 2 |
+| trig | 0 | 0 | 1 | 4 |
+| exp_deriv | 0 | 0 | 3 | 2 |
+
+**Finding:** With 10x more training probes, the patch generalizes to held-out prompts it never saw. 4 validation probes flip from wrong to right across 4 different categories (polynomial derivatives, second derivatives, integrals, primality). Zero probes broke — the collateral damage from Experiment 5 is eliminated entirely. The base model gets 17 of 30 validation probes wrong; the patch fixes 4 of those 17 (23.5%) while breaking none of the 13 it already solves. More diverse training signal produces patches that learn patterns rather than memorize prompts.
+
+Trig and exponential derivative categories saw zero fixes on validation. This suggests certain capability domains may not be reachable via MLP row flips in the current layer set — a calculus-specific layer impact map (Experiment 2 methodology repeated with calculus probes; see `experiments/02_logit_steering.py`) identified layers 5, 6, and 10 as high-impact for calculus but not included in the current search set, which may explain the gap.
+
+**Control probes (knowledge):**
+
+| Probe | Baseline gap | Patched gap | Δ |
+|---|---|---|---|
+| France → Paris | +6.50 | +7.33 | +0.83 |
+| Japan → Tokyo | +8.02 | +9.32 | +1.30 |
+| Sky → blue | +3.68 | +3.84 | +0.16 |
+| Einstein | −4.26 | −4.00 | +0.26 |
+| Water → H2 | +7.84 | +8.09 | +0.25 |
+
+No degradation on measured controls (5 probes).
+
+**Patch statistics:**
+
+| Metric | Value |
+|---|---|
+| Accepted flips | 93 rows |
+| Bits modified | 380,928 (**0.007%**) |
+| Patch size | **1,116 bytes** |
+| Training accuracy | 44/60 → 48/60 |
+| Validation accuracy | 13/30 → 17/30 |
+| Control degradation | None on measured controls |
+
+### Experiment 7: Patch Stacking
+
+We applied the Experiment 3 math patch (72 flips) and Experiment 4 calculus patch (70 flips) simultaneously. Zero row overlap — the patches flip completely different rows, so stacking produces 142 total flips.
+
+| Probe | Baseline | Math only | Calc only | Stacked |
+|---|---|---|---|---|
+| mul_1 (7×8) | −0.31 | **+1.35** | +0.08 | **+0.31** |
+| second_deriv | −0.23 | **+0.42** | **+0.28** | −0.66 |
+| poly_deriv | +0.29 | −1.59 | **+2.77** | +0.19 |
+| add_2 (2+2) | +0.07 | **+1.58** | −0.05 | +0.10 |
+
+| Metric | Math only | Calc only | Stacked |
+|---|---|---|---|
+| Sign flips fixed | 2 | 2 | 1 |
+| Sign flips broke | 1 | 1 | 0 |
+
+Stacking is mechanically correct: order-independent (applying math+calc gives identical results to calc+math), perfectly reversible (zero drift after removal), and produces no invalid states. But behavioral composition shows interference — the math patch damages `poly_deriv` (−1.59) while the calc patch improves it (+2.77), and stacked they partially cancel (+0.19). The stacked patch is safer (0 broke) but less effective (1 fix vs 2 each individually).
+
+**Finding:** Patches compose algebraically but interfere behaviorally. Individual improvements are diluted when combined, though collateral damage is also reduced. Patches optimized jointly (searching for flips that help both math and calculus simultaneously) would likely outperform naive stacking.
+
+### Experiment 8: GSM8K Safety Check
+
+We ran 50 GSM8K word problems (generation with answer extraction) with and without the Experiment 6 generalized patch to check for collateral damage on general math reasoning.
+
+| Metric | Without patch | With patch |
+|---|---|---|
+| Correct | 11/50 | 14/50 |
+| Accuracy | 22.0% | 28.0% |
+| Delta | — | **+6.0%** |
+
+No degradation detected. The patch slightly improved GSM8K accuracy (+3 problems), likely within noise for 50 samples but directionally positive. Note: our GSM8K accuracy (22%) is below Bonsai's reported benchmark (88%) due to differences in evaluation harness (prompt format, answer extraction, generation length). The relative comparison between base and patched is the meaningful signal, not the absolute number.
+
+## Limitations
+
+**Evaluation harness limitations.** Our GSM8K accuracy (22%) is well below reported benchmarks, indicating our evaluation setup doesn't match standard methodology. Logit gap probes are fast but don't always predict generation-level outcomes (visible in the 7×8 example). Proper benchmark evaluation with standard harnesses is a next step.
+
+**Greedy search finds local optima.** Population-based evolutionary search with crossover (XOR of XOR patches is a valid patch) could find better solutions in the same search budget.
+
+**Row-level granularity is coarse.** Each row flip modifies 4,096 bits. Per-group (128 bits) or per-bit search could produce more compact patches at higher search cost, and would reduce the interference visible in the 100/4 probe.
+
+**Patch stacking shows interference.** Experiment 7 confirms that stacking is mechanically sound but behaviorally lossy — individual patches partially cancel each other's improvements. Joint optimization would likely outperform naive stacking.
+
+**Single model, single architecture.** All experiments use Bonsai 8B, currently the only production-quality true 1-bit LLM. The approach does not extend to ternary/1.58-bit models. Generalization depends on the emergence of additional true 1-bit models.
+
+**Scale factors are not patched.** Current patches modify only binary weights, not the FP16 scale/bias values. Including scale deltas could enable finer-grained control at the cost of larger patches.
+
+**Small evaluation set.** Our probes cover limited domains. A comprehensive evaluation across diverse tasks is needed to characterize the full potential and failure modes of XOR patching.
+
+## Responsible Use
+
+Bankai modifies model behavior with kilobyte-scale patches that are invisible at inference time. The same mechanism that enables constructive behavioral steering could, in principle, be used to insert subtle malicious behavioral changes — this is the dual-use nature of inverting adversarial bit-flip research.
+
+However, XOR patches are **transparent by design**:
+- Every patch is a readable JSON file listing exactly which rows were flipped
+- Patch verification is trivial: compute the Hamming distance between patched and unpatched weights and confirm it matches the patch manifest
+- The patch format is structured for auditing, diffing, and revocation
+- The XOR operation is deterministic — there are no hidden states or opaque transformations
+
+We recommend that any deployment of XOR-patched models include patch provenance metadata (who created it, what fitness function was used, what probes were optimized) and that patches be verified against their manifest before use. If patch libraries become a real deployment pattern (as described in [Why This Matters at Deployment Scale](#why-this-matters-at-deployment-scale)), provenance and verification become critical infrastructure — not just good practice, but a requirement for trust in the patch ecosystem.
+
+## Future Work
+
+- **Evolutionary search** — population-based with crossover (XOR of XOR patches = valid patch) and Hamming-distance-based diversity pressure
+- **Benchmark evaluation** — MMLU subcategories, GSM8K, HumanEval to quantify real accuracy changes
+- **Bit-level and group-level search** — finer granularity for more compact patches
+- **Patch stacking** — empirical composability testing and interference characterization
+- **Cross-model extraction** — XOR between Bonsai variants as naturally occurring patches
+- **Hamming-distance distillation** — minimize bit flips needed to match a teacher model's behavior
+- **Theoretical analysis** — connect patch sparsity to information-theoretic bounds on binary weight redundancy
+
+## Reproducing
+
+### Requirements
+
+- Apple Silicon Mac (M-series) or compatible MLX environment
+- Python 3.11+
+- PrismML's MLX fork (1-bit kernel support)
+
+### Setup
+
+```bash
+git clone https://github.com/nikshepsvn/bankai.git
+cd bankai
+
+python -m venv .venv && source .venv/bin/activate
+pip install mlx-lm
+pip install "mlx @ git+https://github.com/PrismML-Eng/mlx.git@prism"
+pip install -e ".[dev]"
+
+# Download model (~1.3 GB)
+huggingface-cli download prism-ml/Bonsai-8B-mlx-1bit --local-dir models/bonsai-8b-mlx
+```
+
+### Run experiments
+
+```bash
+# Experiment 1: Random bit flip robustness (~8 min)
+python experiments/01_random_flips.py
+
+# Experiment 2: Layer impact and scale-guided targeting (~2 min)
+python experiments/02_logit_steering.py
+
+# Experiment 3: Greedy patch search (~8 min)
+python experiments/03_patch_search.py
+
+# Experiment 4: Calculus patch with screening (~13 min)
+python experiments/04_calculus_patch.py
+
+# Experiment 5: Variation testing (~3 min)
+python experiments/05_variation_testing.py
+
+# Experiment 6: Generalization-optimized search (~67 min)
+python experiments/06_generalization_search.py
+```
+
+### Use the toolkit
+
+```bash
+# Search for a patch using built-in probes
+bankai search --model models/bonsai-8b-mlx --target math --output patches/my_patch.json
+
+# Search using a custom probe file
+bankai search --model models/bonsai-8b-mlx --target my_probes.json --output patches/custom.json
+
+# Evaluate a patch
+bankai eval --model models/bonsai-8b-mlx --patch patches/patch_math_v1.json --probes math,knowledge
+
+# Compare generation with/without patch
+bankai apply --model models/bonsai-8b-mlx --patch patches/patch_math_v1.json --prompt "2 + 2 ="
+```
+
+### Define custom probes
+
+Create a JSON file with your target behavior:
+
+```json
+[
+  {"prompt": "SELECT * FROM", "correct": " users", "wrong": " tables", "name": "sql_1", "category": "sql"},
+  {"prompt": "git checkout -b", "correct": " feature", "wrong": " master", "name": "git_1", "category": "git"}
+]
+```
+
+Then: `bankai search --model models/bonsai-8b-mlx --target my_probes.json`
+
+## Citation
+
+```bibtex
+@misc{saravanan2026bankai,
+  title   = {Bankai: Ultra-Sparse Adaptation of 1-Bit LLMs via XOR Patches},
+  author  = {Saravanan, Nikshep},
+  year    = {2026},
+  url     = {https://github.com/nikshepsvn/bankai}
+}
+```
+
+## References
+
+- Hu, E. J., et al. (2021). LoRA: Low-Rank Adaptation of Large Language Models. [arXiv:2106.09685](https://arxiv.org/abs/2106.09685)
+- Rakin, A. S., et al. (2019). Bit-Flip Attack: Crushing Neural Network with Progressive Bit Search. [ICCV 2019](https://arxiv.org/abs/1903.12269)
+- Dong, P., et al. (2024). STBLLM: Breaking the 1-Bit Barrier with Structured Binary LLMs. [ICLR 2025](https://arxiv.org/abs/2408.01803)
+- Wang, H., et al. (2023). BitNet: Scaling 1-bit Transformers for Large Language Models. [arXiv:2310.11453](https://arxiv.org/abs/2310.11453)
+- Ma, S., et al. (2025). BitNet b1.58 2B4T Technical Report. [arXiv:2504.12285](https://arxiv.org/abs/2504.12285)
+- PrismML. (2026). Bonsai 8B. [prismml.com/news/bonsai-8b](https://prismml.com/news/bonsai-8b)
+- Meng, K., et al. (2022). Locating and Editing Factual Associations in GPT. [NeurIPS 2022](https://arxiv.org/abs/2202.05262)
+- Meng, K., et al. (2023). Mass-Editing Memory in a Transformer. [ICLR 2023](https://arxiv.org/abs/2210.07229)
+- Bai, Y., et al. (2021). Targeted Attack against Deep Neural Networks via Flipping Limited Weight Bits. [ICLR 2021](https://arxiv.org/abs/2102.10496)
+- Xu, Y., et al. (2024). RECAST: Reparameterized, Compact weight Adaptation for Sequential Tasks. [arXiv:2411.16870](https://arxiv.org/abs/2411.16870)
+- Bulat, A. & Tzimiropoulos, G. (2020). XOR-Net: An Efficient Computation Pipeline for Binary Neural Network Inference on Edge Devices.
+- Rastegari, M., et al. (2016). XNOR-Net: ImageNet Classification Using Binary Convolutional Neural Networks. [ECCV 2016](https://arxiv.org/abs/1603.05279)
+
+## License
+
+Apache 2.0

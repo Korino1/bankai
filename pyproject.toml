@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bankai"
+version = "0.1.0"
+description = "XOR patches for 1-bit language models"
+requires-python = ">=3.11"
+dependencies = [
+    "mlx-lm>=0.20",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["datasets", "matplotlib"]
+
+[tool.setuptools.packages.find]
+include = ["bankai*"]
+
+[project.scripts]
+bankai = "bankai.cli:main"

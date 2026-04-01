@@ -1,0 +1,371 @@
+{
+  "version": 1,
+  "type": "row_flip",
+  "description": "Math reasoning improvement patch",
+  "base_model": "prism-ml/Bonsai-8B-mlx-1bit",
+  "flips": [
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 5414
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 2786
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 5301
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 6676
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 7144
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 11633
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 10189
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 8311
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 3138
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 8555
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 10998
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 9326
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 8570
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 4538
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 4007
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 29
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 3956
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 576
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 10757
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 10123
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 4878
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 10672
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 8763
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 469
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 3783
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 1790
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 1050
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 6567
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 7165
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 7624
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 6981
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 10295
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 7903
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 2752
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 11818
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 9970
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 7617
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 10767
+    },
+    {
+      "layer": 2,
+      "proj": "up_proj",
+      "row": 9669
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 315
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 6821
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 277
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 9759
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 9434
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 6977
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 3353
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 10344
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 5100
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 3630
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 10776
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 3086
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 2808
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 10160
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 4655
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 2529
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 2662
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 1057
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 9999
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 3662
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 6712
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 3651
+    },
+    {
+      "layer": 3,
+      "proj": "up_proj",
+      "row": 2108
+    },
+    {
+      "layer": 3,
+      "proj": "gate_proj",
+      "row": 11187
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 1811
+    },
+    {
+      "layer": 4,
+      "proj": "up_proj",
+      "row": 4434
+    },
+    {
+      "layer": 34,
+      "proj": "gate_proj",
+      "row": 5506
+    },
+    {
+      "layer": 1,
+      "proj": "gate_proj",
+      "row": 4284
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 11160
+    },
+    {
+      "layer": 2,
+      "proj": "gate_proj",
+      "row": 7589
+    },
+    {
+      "layer": 4,
+      "proj": "gate_proj",
+      "row": 3815
+    },
+    {
+      "layer": 34,
+      "proj": "up_proj",
+      "row": 6544
+    },
+    {
+      "layer": 1,
+      "proj": "up_proj",
+      "row": 12202
+    }
+  ],
+  "n_flips": 72,
+  "bits_flipped": 294912,
+  "patch_size_bytes": 864
+}
